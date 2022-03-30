@@ -335,6 +335,12 @@ class Database(object):
                 (ENQUEUED, uuid),
             )
 
+    def reenqueue_job(self, uuid):
+        with closing(self.conn.cursor()) as cr:
+            cr.execute(
+                "UPDATE queue_job SET state=%s " "WHERE uuid=%s", (PENDING, uuid),
+            )
+
 
 class QueueJobRunner(object):
     def __init__(
@@ -500,6 +506,9 @@ class QueueJobRunner(object):
                 #       on which queue_job is installed after server start?
                 self.initialize_databases()
                 _logger.info("database connections ready")
+                started_jobs = self.channel_manager.get_started_jobs()
+                for job in started_jobs:
+                    self.db_by_name[job.db_name].reenqueue_job(job.uuid)
                 # inner loop does the normal processing
                 while not self._stop:
                     self.process_notifications()

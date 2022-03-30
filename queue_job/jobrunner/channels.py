@@ -522,6 +522,9 @@ class Channel(object):
             return True
         return len(self._running) < self.capacity
 
+    def get_started_jobs(self):
+        return self._running
+
     def get_jobs_to_run(self, now):
         """Get jobs that are ready to run in channel.
 
@@ -1058,3 +1061,6 @@ class ChannelManager(object):
 
     def get_wakeup_time(self):
         return self._root_channel.get_wakeup_time()
+
+    def get_started_jobs(self):
+        return self._root_channel.get_started_jobs()
