@@ -226,7 +226,7 @@ msgstr "Exception :"
 
 #. module: queue_job
 #: model:ir.model.fields,field_description:queue_job.field_queue_job__eta
-msgid "Execute only after"
+msgid "Execute only after [time]"
 msgstr "Exécuter uniquement après"
 
 #. module: queue_job

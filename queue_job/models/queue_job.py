@@ -87,7 +87,7 @@ class QueueJob(models.Model):
         help="Time required to execute this job in seconds. Average when grouped.",
     )
 
-    eta = fields.Datetime(string="Execute only after")
+    eta = fields.Datetime(string="Execute only after [time]")
     retry = fields.Integer(string="Current try")
     max_retries = fields.Integer(
         string="Max. retries",
@@ -105,7 +105,7 @@ class QueueJob(models.Model):
 
     identity_key = fields.Char(readonly=True)
     worker_pid = fields.Integer(readonly=True)
-    parent_id = fields.Many2one("queue.job", string="Parent Job")
+    parent_uuids = fields.Char(string="Execute only after [jobs]")
 
     def init(self):
         self._cr.execute(

@@ -227,8 +227,13 @@ msgstr ""
 
 #. module: queue_job
 #: model:ir.model.fields,field_description:queue_job.field_queue_job__eta
-msgid "Execute only after"
-msgstr "Erst ausführen nach"
+msgid "Execute only after [time]"
+msgstr "Erst ausführen nach [Zeit]"
+
+#. module: queue_job
+#: model:ir.model.fields,field_description:queue_job.field_queue_job__parent_uuid
+msgid "Execute only after [job]"
+msgstr "Erst ausführen nach [Job]"
 
 #. module: queue_job
 #: model:ir.model.fields,field_description:queue_job.field_queue_job__exec_time

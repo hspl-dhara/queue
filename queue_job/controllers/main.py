@@ -53,12 +53,10 @@ class RunJobController(http.Controller):
 
         # ensure the job to run is in the correct state and lock the record
         env.cr.execute(
-            "SELECT state, parent_id FROM queue_job WHERE uuid=%s AND state=%s FOR UPDATE",
+            "SELECT state FROM queue_job WHERE uuid=%s AND state=%s FOR UPDATE",
             (job_uuid, ENQUEUED),
         )
-        data = env.cr.fetchone()
-
-        if not data:
+        if not env.cr.fetchone():
             _logger.warn(
                 "was requested to run job %s, but it does not exist, "
                 "or is not in state %s",
@@ -70,17 +68,8 @@ class RunJobController(http.Controller):
         job = Job.load(env, job_uuid)
         assert job and job.state == ENQUEUED
 
-        if data and data[1]:
-            env.cr.execute(
-                "SELECT state FROM queue_job WHERE id=%s FOR UPDATE", ((data[1],)),
-            )
-            st = env.cr.fetchone()
-            if st and st[0] != "done":
-                retry_postpone(job, "Sync Call", seconds=2)
-                return ""
         try:
             try:
-
                 self._try_perform_job(env, job)
             except OperationalError as err:
                 # Automatically retry the typical transaction serialization
