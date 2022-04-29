@@ -44,6 +44,7 @@ class Base(models.AbstractModel):
         description=None,
         channel=None,
         identity_key=None,
+        parent_uuids=None,
     ):
         """ Return a ``DelayableRecordset``
 
@@ -81,6 +82,7 @@ class Base(models.AbstractModel):
                              the new job will not be added. It is either a
                              string, either a function that takes the job as
                              argument (see :py:func:`..job.identity_exact`).
+        :param parent_uuids: Do not run job before job parent_uuids is done.
         :return: instance of a DelayableRecordset
         :rtype: :class:`odoo.addons.queue_job.job.DelayableRecordset`
 
@@ -108,6 +110,7 @@ class Base(models.AbstractModel):
             description=description,
             channel=channel,
             identity_key=identity_key,
+            parent_uuids=parent_uuids,
         )
 
     def _patch_job_auto_delay(self, method_name, context_key=None):

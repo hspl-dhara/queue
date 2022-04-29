@@ -59,6 +59,7 @@ class DelayableRecordset(object):
         description=None,
         channel=None,
         identity_key=None,
+        parent_uuids=None,
     ):
         self.recordset = recordset
         self.priority = priority
@@ -67,6 +68,12 @@ class DelayableRecordset(object):
         self.description = description
         self.channel = channel
         self.identity_key = identity_key
+        uuid_list = parent_uuids
+        if uuid_list:
+            uuid_str = ", ".join(uuid_list)
+        else:
+            uuid_str = ""
+        self.parent_uuids = uuid_str
 
     def __getattr__(self, name):
         if name in self.recordset:
@@ -88,6 +95,7 @@ class DelayableRecordset(object):
                 description=self.description,
                 channel=self.channel,
                 identity_key=self.identity_key,
+                parent_uuids=self.parent_uuids,
             )
 
         return delay
@@ -249,7 +257,9 @@ class Job(object):
         A key referencing the job, multiple job with the same key will not
         be added to a channel if the existing job with the same key is not yet
         started or executed.
+    .. attribute:: parent_uuids
 
+        Do not run job before job parent_uuids is done.
     """
 
     @classmethod
@@ -276,6 +286,9 @@ class Job(object):
         eta = None
         if stored.eta:
             eta = stored.eta
+        parent_uuids = None
+        if stored.parent_uuids:
+            parent_uuids = stored.parent_uuids
 
         job_ = cls(
             method,
@@ -287,6 +300,7 @@ class Job(object):
             description=stored.name,
             channel=stored.channel,
             identity_key=stored.identity_key,
+            parent_uuids=parent_uuids,
         )
 
         if stored.date_created:
@@ -339,6 +353,7 @@ class Job(object):
         description=None,
         channel=None,
         identity_key=None,
+        parent_uuids=None,
     ):
         """Create a Job and enqueue it in the queue. Return the job uuid.
 
@@ -359,6 +374,7 @@ class Job(object):
             description=description,
             channel=channel,
             identity_key=identity_key,
+            parent_uuids=parent_uuids,
         )
         if new_job.identity_key:
             existing = new_job.job_record_with_same_identity_key()
@@ -399,6 +415,7 @@ class Job(object):
         description=None,
         channel=None,
         identity_key=None,
+        parent_uuids=None,
     ):
         """ Create a Job
 
@@ -423,6 +440,7 @@ class Job(object):
         :param identity_key: A hash to uniquely identify a job, or a function
                              that returns this hash (the function takes the job
                              as argument)
+        :param parent_uuids: Execute job only after job parent_uuids is done.
         :param env: Odoo Environment
         :type env: :class:`odoo.api.Environment`
         """
@@ -499,6 +517,7 @@ class Job(object):
         self.eta = eta
         self.channel = channel
         self.worker_pid = None
+        self.parent_uuids = parent_uuids
 
     def perform(self):
         """Execute the job.
@@ -561,6 +580,7 @@ class Job(object):
             "eta": False,
             "identity_key": False,
             "worker_pid": self.worker_pid,
+            "parent_uuids": False,
         }
 
         if self.date_enqueued:
@@ -575,6 +595,8 @@ class Job(object):
             vals["eta"] = self.eta
         if self.identity_key:
             vals["identity_key"] = self.identity_key
+        if self.parent_uuids:
+            vals["parent_uuids"] = self.parent_uuids
 
         if create:
             vals.update(

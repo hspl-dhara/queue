@@ -341,6 +341,29 @@ class Database(object):
                 "UPDATE queue_job SET state=%s " "WHERE uuid=%s", (PENDING, uuid),
             )
 
+    def get_parent_job_done(self, uuid):
+        with closing(self.conn.cursor()) as cr:
+            cr.execute(
+                "SELECT parent_uuids FROM queue_job WHERE uuid=%s", (uuid,),
+            )
+            parent_uuids = cr.fetchone()
+            if parent_uuids and parent_uuids[0]:
+                parent_list = tuple(parent_uuids[0].split(", "))
+                cr.execute(
+                    "SELECT state FROM queue_job WHERE uuid in %s", (parent_list,),
+                )
+                parent_state = cr.fetchall()
+                parent_state_list = list(set(parent_state))
+                if len(parent_state_list) > 1:
+                    return False
+                else:
+                    if (
+                        len(parent_state_list) == 1
+                        and parent_state_list[0][0] != "done"
+                    ):
+                        return False
+            return True
+
 
 class QueueJobRunner(object):
     def __init__(
@@ -427,17 +450,22 @@ class QueueJobRunner(object):
         for job in self.channel_manager.get_jobs_to_run(now):
             if self._stop:
                 break
-            _logger.info("asking Odoo to run job %s on db %s", job.uuid, job.db_name)
-            self.db_by_name[job.db_name].set_job_enqueued(job.uuid)
-            _async_http_get(
-                self.scheme,
-                self.host,
-                self.port,
-                self.user,
-                self.password,
-                job.db_name,
-                job.uuid,
-            )
+            if self.db_by_name[job.db_name].get_parent_job_done(job.uuid):
+                _logger.info(
+                    "asking Odoo to run job %s on db %s", job.uuid, job.db_name
+                )
+                self.db_by_name[job.db_name].set_job_enqueued(job.uuid)
+                _async_http_get(
+                    self.scheme,
+                    self.host,
+                    self.port,
+                    self.user,
+                    self.password,
+                    job.db_name,
+                    job.uuid,
+                )
+            else:
+                self.db_by_name[job.db_name].reenqueue_job(job.uuid)
 
     def process_notifications(self):
         for db in self.db_by_name.values():

@@ -44,7 +44,11 @@
                         <group>
                             <field name="priority" />
                             <field name="eta" />
-                            <field name="parent_id" readonly="1" />
+                            <field
+                                name="parent_uuids"
+                                readonly="1"
+                                help="Holds the parent job uuids, current job will start execution only after the completion of these jobs"
+                            />
                             <field
                                 name="company_id"
                                 groups="base.group_multi_company"
@@ -112,14 +116,20 @@
                 <field name="model_name" />
                 <field name="state" />
                 <field name="date_created" />
+                <field name="priority" />
                 <field name="eta" />
+                <field name="parent_uuids" readonly="1" />
                 <field name="date_done" />
-                <field name="exec_time" />
-                <field name="exc_name" />
-                <field name="exc_message" />
-                <field name="uuid" />
-                <field name="channel" />
-                <field name="company_id" groups="base.group_multi_company" />
+                <field name="exec_time" optional="hide" />
+                <field name="exc_name" optional="hide" />
+                <field name="exc_message" optional="hide" />
+                <field name="uuid" optional="hide" />
+                <field name="channel" optional="hide" />
+                <field
+                    name="company_id"
+                    groups="base.group_multi_company"
+                    optional="hide"
+                />
             </tree>
         </field>
     </record>
