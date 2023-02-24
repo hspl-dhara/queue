@@ -7,9 +7,9 @@ from heapq import heappop, heappush
 from weakref import WeakValueDictionary
 
 from ..exception import ChannelNotFound
-from ..job import DONE, ENQUEUED, FAILED, PENDING, STARTED
+from ..job import DONE, ENQUEUED, FAILED, PENDING, STARTED, WAIT_DEPENDENCIES
 
-NOT_DONE = (PENDING, ENQUEUED, STARTED, FAILED)
+NOT_DONE = (WAIT_DEPENDENCIES, PENDING, ENQUEUED, STARTED, FAILED)
 
 _logger = logging.getLogger(__name__)
 
@@ -945,7 +945,9 @@ class ChannelManager(object):
         _logger.info("Configured channel: %s", channel)
         return channel
 
-    def get_channel_by_name(self, channel_name, autocreate=False):
+    def get_channel_by_name(
+        self, channel_name, autocreate=False, parent_fallback=False
+    ):
         """Return a Channel object by its name.
 
         If it does not exist and autocreate is True, it is created
@@ -990,9 +992,26 @@ class ChannelManager(object):
             channel_name = self._root_channel.name + "." + channel_name
         if channel_name in self._channels_by_name:
             return self._channels_by_name[channel_name]
-        if not autocreate:
+        if not autocreate and not parent_fallback:
             raise ChannelNotFound("Channel %s not found" % channel_name)
         parent = self._root_channel
+        if parent_fallback:
+            # Look for first direct parent w/ config.
+            # Eg: `root.edi.foo.baz` will falback on `root.edi.foo`
+            # or `root.edi` or `root` in sequence
+            parent_name = channel_name
+            while True:
+                parent_name = parent_name.rsplit(".", 1)[:-1][0]
+                if parent_name == self._root_channel.name:
+                    break
+                if parent_name in self._channels_by_name:
+                    parent = self._channels_by_name[parent_name]
+                    _logger.debug(
+                        "%s has no specific configuration: using %s",
+                        channel_name,
+                        parent_name,
+                    )
+                    break
         for subchannel_name in channel_name.split(".")[1:]:
             subchannel = parent.get_subchannel_by_name(subchannel_name)
             if not subchannel:
@@ -1005,7 +1024,7 @@ class ChannelManager(object):
         self, db_name, channel_name, uuid, seq, date_created, priority, eta, state
     ):
         try:
-            channel = self.get_channel_by_name(channel_name)
+            channel = self.get_channel_by_name(channel_name, parent_fallback=True)
         except ChannelNotFound:
             _logger.warning(
                 "unknown channel %s, using root channel for job %s", channel_name, uuid
@@ -1041,6 +1060,9 @@ class ChannelManager(object):
             job.channel.set_running(job)
         elif state == FAILED:
             job.channel.set_failed(job)
+        elif state == WAIT_DEPENDENCIES:
+            # wait until all parent jobs are done
+            pass
         else:
             _logger.error("unexpected state %s for job %s", state, job)
 

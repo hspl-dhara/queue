@@ -3,16 +3,19 @@
 # License LGPL-3.0 or later (http://www.gnu.org/licenses/lgpl.html)
 
 import logging
+import random
+import time
 import traceback
 from io import StringIO
 
-from psycopg2 import OperationalError
-from werkzeug.exceptions import Forbidden
+from psycopg2 import OperationalError, errorcodes
+from werkzeug.exceptions import BadRequest, Forbidden
 
 import odoo
 from odoo import _, http, tools
 from odoo.service.model import PG_CONCURRENCY_ERRORS_TO_RETRY
 
+from ..delay import chain, group
 from ..exception import FailedJobError, NothingToDoJob, RetryableJobError
 from ..job import ENQUEUED, Job
 
@@ -20,6 +23,7 @@ _logger = logging.getLogger(__name__)
 
 PG_RETRY = 5  # seconds
 
+DEPENDS_MAX_TRIES_ON_CONCURRENCY_FAILURE = 5
 
 class RunJobController(http.Controller):
     def _try_perform_job(self, env, job):
@@ -35,6 +39,35 @@ class RunJobController(http.Controller):
         env["base"].flush()
         env.cr.commit()
         _logger.debug("%s done", job)
+
+    def _enqueue_dependent_jobs(self, env, job):
+        tries = 0
+        while True:
+            try:
+                job.enqueue_waiting()
+            except OperationalError as err:
+                # Automatically retry the typical transaction serialization
+                # errors
+                if err.pgcode not in PG_CONCURRENCY_ERRORS_TO_RETRY:
+                    raise
+                if tries >= DEPENDS_MAX_TRIES_ON_CONCURRENCY_FAILURE:
+                    _logger.info(
+                        "%s, maximum number of tries reached to update dependencies",
+                        errorcodes.lookup(err.pgcode),
+                    )
+                    raise
+                wait_time = random.uniform(0.0, 2 ** tries)
+                tries += 1
+                _logger.info(
+                    "%s, retry %d/%d in %.04f sec...",
+                    errorcodes.lookup(err.pgcode),
+                    tries,
+                    DEPENDS_MAX_TRIES_ON_CONCURRENCY_FAILURE,
+                    wait_time,
+                )
+                time.sleep(wait_time)
+            else:
+                break
 
     @http.route("/queue_job/runjob", type="http", auth="none", save_session=False)
     def runjob(self, db, job_uuid, **kw):
@@ -99,6 +132,7 @@ class RunJobController(http.Controller):
             # traceback in the logs we should have the traceback when all
             # retries are exhausted
             env.cr.rollback()
+            return ""
 
         except (FailedJobError, Exception) as orig_exception:
             buff = StringIO()
@@ -115,6 +149,10 @@ class RunJobController(http.Controller):
                     new_cr.commit()
                     buff.close()
             raise
+
+        _logger.debug("%s enqueue depends started", job)
+        self._enqueue_dependent_jobs(env, job)
+        _logger.debug("%s enqueue depends done", job)
 
         return ""
 
